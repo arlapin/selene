@@ -8,7 +8,9 @@ import warnings
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import average_precision_score, roc_auc_score
 from torch.autograd import Variable
+
 
 from .sequences import Genome
 from .utils import _is_lua_trained_model
@@ -95,7 +97,9 @@ class EvaluateModel(object):
                  report_gt_feature_n_positives=10,
                  use_cuda=False,
                  data_parallel=False,
-                 use_features_ord=None):
+                 use_features_ord=None,
+                 metrics=dict(roc_auc=roc_auc_score,
+                              average_precision=average_precision_score)):
         self.criterion = criterion
 
         trained_model = torch.load(
@@ -148,7 +152,8 @@ class EvaluateModel(object):
 
         self._metrics = PerformanceMetrics(
             self._get_feature_from_index,
-            report_gt_feature_n_positives=report_gt_feature_n_positives)
+            report_gt_feature_n_positives=report_gt_feature_n_positives,
+            metrics=metrics)
 
         self._test_data, self._all_test_targets = \
             self.sampler.get_data_and_targets(self.batch_size, n_test_samples)
