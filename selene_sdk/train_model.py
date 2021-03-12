@@ -13,6 +13,7 @@ import torch.nn as nn
 from sklearn.metrics import average_precision_score, roc_auc_score
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from tqdm import tqdm
 
 from .utils import (PerformanceMetrics, initialize_logger,
                     load_model_from_state_dict)
@@ -374,7 +375,7 @@ class TrainModel(object):
 
         train_losses = []
         time_per_step = []
-        for step in range(self._start_step, self.max_steps):
+        for step in tqdm(range(self._start_step, self.max_steps)):
             t_i = time()
             train_losses.append(self.train())
             t_f = time()
