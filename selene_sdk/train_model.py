@@ -13,6 +13,7 @@ import torch.nn as nn
 from sklearn.metrics import average_precision_score, roc_auc_score
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from .utils import (PerformanceMetrics, initialize_logger,
@@ -235,6 +236,7 @@ class TrainModel(object):
 
         os.makedirs(output_dir, exist_ok=True)
         self.output_dir = output_dir
+        self._writer = SummaryWriter(os.path.join(self.output_dir))
 
         initialize_logger(
             os.path.join(self.output_dir, "{0}.log".format(__name__)),
@@ -409,14 +411,17 @@ class TrainModel(object):
 
                 train_loss = np.average(train_losses)
                 self._train_logger.info(train_loss)
+                self._writer.add_scalar('loss/train', train_loss, step)
                 train_losses = []
 
                 valid_scores = self.validate()
                 validation_loss = valid_scores["loss"]
+                self._writer.add_scalar('loss/test', validation_loss, step)
                 to_log = [str(validation_loss)]
                 for k in sorted(self._validation_metrics.metrics.keys()):
                     if k in valid_scores and valid_scores[k]:
                         to_log.append(str(valid_scores[k]))
+                        self._writer.add_scalar('{}/test'.format(k), valid_scores[k], step)
                     else:
                         to_log.append("NA")
                 self._validation_logger.info("\t".join(to_log))
