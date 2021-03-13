@@ -375,12 +375,17 @@ class TrainModel(object):
             verbose=True,
             factor=0.8)
 
-        train_losses = []
         time_per_step = []
+        train_losses = []
+        train_predictions = []
+        train_targets = []
         for step in tqdm(range(self._start_step, self.max_steps)):
             t_i = time()
-            train_losses.append(self.train())
+            prediction, target, loss = self.train()
             t_f = time()
+            train_losses.append(loss)
+            train_predictions.append(prediction)
+            train_targets.append(target)
             time_per_step.append(t_f - t_i)
 
             if step % self.nth_step_save_checkpoint == 0:
@@ -414,10 +419,22 @@ class TrainModel(object):
                 self._writer.add_scalar('loss/train', train_loss, step)
                 train_losses = []
 
+                train_scores = self._compute_metrics(
+                        np.concatenate(train_predictions),
+                        np.concatenate(train_targets),
+                        log_prefix='train'
+                )
+                train_predictions = []
+                train_targets = []
+                for k in sorted(self._validation_metrics.metrics.keys()):
+                    if k in train_scores and train_scores[k]:
+                        self._writer.add_scalar('{}/train'.format(k), train_scores[k], step)
+
                 valid_scores = self.validate()
                 validation_loss = valid_scores["loss"]
                 self._writer.add_scalar('loss/test', validation_loss, step)
                 to_log = [str(validation_loss)]
+
                 for k in sorted(self._validation_metrics.metrics.keys()):
                     if k in valid_scores and valid_scores[k]:
                         to_log.append(str(valid_scores[k]))
@@ -467,7 +484,7 @@ class TrainModel(object):
         loss.backward()
         self.optimizer.step()
 
-        return loss.item()
+        return predictions.cpu().detach().numpy(), targets.cpu().detach().numpy(), loss.item()
 
     def _evaluate_on_data(self, data_in_batches):
         """
@@ -503,6 +520,25 @@ class TrainModel(object):
                 batch_losses.append(loss.item())
         all_predictions = np.vstack(all_predictions)
         return np.average(batch_losses), all_predictions
+
+    def _compute_metrics(self, predictions, targets, log_prefix=None):
+        """
+        Measures performance on given predictions and targets.
+
+        Returns
+        -------
+        dict
+            A dictionary, where keys are the names of the loss metrics,
+            and the values are the average value for that metric over
+            the validation set.
+
+        """
+        scores = self._validation_metrics.update(predictions, targets)
+        if log_prefix:
+            for name, score in scores.items():
+                logger.info("{} {}: {}".format(log_prefix, name, score))
+
+        return scores
 
     def validate(self):
         """
