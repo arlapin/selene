@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import average_precision_score, roc_auc_score
 from torch.autograd import Variable
+from tqdm import tqdm
 
 
 from .sequences import Genome
@@ -214,7 +215,7 @@ class EvaluateModel(object):
         """
         batch_losses = []
         all_predictions = []
-        for samples_batch in self._test_data:
+        for samples_batch in tqdm(self._test_data):
             inputs, targets = samples_batch.torch_inputs_and_targets(self.use_cuda)
             targets = targets[:, self._use_ixs]
 
