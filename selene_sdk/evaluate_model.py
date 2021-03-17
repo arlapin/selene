@@ -101,6 +101,7 @@ class EvaluateModel(object):
                  use_features_ord=None,
                  metrics=dict(roc_auc=roc_auc_score,
                               average_precision=average_precision_score)):
+        print('Evaluator loading')
         self.criterion = criterion
 
         trained_model = torch.load(
@@ -156,13 +157,14 @@ class EvaluateModel(object):
             report_gt_feature_n_positives=report_gt_feature_n_positives,
             metrics=metrics)
 
+        print('Loading samples')
         self._test_data, self._all_test_targets = \
             self.sampler.get_data_and_targets(self.batch_size, n_test_samples)
         # TODO: we should be able to do this on the sampler end instead of
         # here. the current workaround is problematic, since
         # self._test_data still has the full featureset in it, and we
         # select the subset during `evaluate`
-        self._all_test_targets = self._all_test_targets[:, self._use_ixs]
+        #  self._all_test_targets = self._all_test_targets[:, self._use_ixs]
 
         # reset Genome base ordering when applicable.
         if (hasattr(self.sampler, "reference_sequence") and
@@ -171,6 +173,8 @@ class EvaluateModel(object):
                 Genome.update_bases_order(['A', 'G', 'C', 'T'])
             else:
                 Genome.update_bases_order(['A', 'C', 'G', 'T'])
+
+        print('Evaluator loaded')
 
     def _write_features_ordered_to_file(self):
         """
@@ -217,7 +221,7 @@ class EvaluateModel(object):
         all_predictions = []
         for samples_batch in tqdm(self._test_data):
             inputs, targets = samples_batch.torch_inputs_and_targets(self.use_cuda)
-            targets = targets[:, self._use_ixs]
+            #  targets = targets[:, self._use_ixs]
 
             with torch.no_grad():
                 predictions = None
@@ -226,7 +230,7 @@ class EvaluateModel(object):
                         inputs.contiguous().unsqueeze_(2))
                 else:
                     predictions = self.model.forward(inputs)
-                predictions = predictions[:, self._use_ixs]
+                #  predictions = predictions[:, self._use_ixs]
                 loss = self.criterion(predictions, targets)
 
                 all_predictions.append(predictions.data.cpu().numpy())
