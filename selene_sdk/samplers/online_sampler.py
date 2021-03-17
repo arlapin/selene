@@ -7,6 +7,7 @@ Objects of the class `OnlineSampler`, are samplers which load examples
 import os
 import random
 from abc import ABCMeta
+from tqdm import tqdm
 
 import numpy as np
 
@@ -327,7 +328,7 @@ class OnlineSampler(Sampler, metaclass=ABCMeta):
             n_samples = 640000
 
         n_batches = int(n_samples / batch_size)
-        for _ in range(n_batches):
+        for _ in tqdm(range(n_batches), 'Sampling dataset'):
             samples_batch = self.sample(batch_size)
             batches.append(samples_batch)
         targets_mat = np.vstack([batch.targets() for batch in batches])
