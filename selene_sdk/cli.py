@@ -24,7 +24,7 @@ from selene_sdk.utils import load_path, parse_configs_and_run
 def main(path, lr):
     """Build the model and trains it using user-specified input data."""
     configs = load_path(path, instantiate=False)
-    parse_configs_and_run(configs, lr=lr)
+    parse_configs_and_run(configs, path, lr=lr)
 
 
 if __name__ == "__main__":

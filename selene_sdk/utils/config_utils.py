@@ -10,6 +10,7 @@ from time import strftime
 import types
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from . import _is_lua_trained_model
 from . import instantiate
@@ -248,6 +249,7 @@ def execute(operations, configs, output_dir):
 
 
 def parse_configs_and_run(configs,
+                          configs_path,
                           create_subdirectory=True,
                           lr=None):
     """
@@ -303,9 +305,9 @@ def parse_configs_and_run(configs,
     """
     operations = configs["ops"]
 
-    if "train" in operations and "lr" not in configs and lr != "None":
+    if "train" in operations and "lr" not in configs and lr and lr != "None":
         configs["lr"] = float(lr)
-    elif "train" in operations and "lr" in configs and lr != "None":
+    elif "train" in operations and "lr" in configs and lr and lr != "None":
         print("Warning: learning rate specified in both the "
               "configuration dict and this method's `lr` parameter. "
               "Using the `lr` value input to `parse_configs_and_run` "
@@ -337,5 +339,12 @@ def parse_configs_and_run(configs,
     else:
         print("Warning: no random seed specified in config file. "
               "Using a random seed ensures results are reproducible.")
+
+    writer = SummaryWriter(os.path.join(current_run_output_dir))
+    with open(configs_path, 'r') as config_file:
+        # Add <pre> to persist spaces
+        config_content = "<pre>" + config_file.read() + "</pre>"
+        writer.add_text('config', config_content)
+    writer.close()
 
     execute(operations, configs, current_run_output_dir)
