@@ -345,6 +345,11 @@ def parse_configs_and_run(configs,
         # Add <pre> to persist spaces
         config_content = "<pre>" + config_file.read() + "</pre>"
         writer.add_text('config', config_content)
+
+    with open(configs["model"]["path"], 'r') as model_file:
+        # Add <pre> to persist spaces
+        model_file_content = "<pre>" + model_file.read() + "</pre>"
+        writer.add_text("model", model_file_content)
     writer.close()
 
     execute(operations, configs, current_run_output_dir)
