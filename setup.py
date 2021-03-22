@@ -64,6 +64,7 @@ setup(name="selene-sdk",
         "seaborn",
         "statsmodels",
         "torch>=0.4.1",
+        "tqdm",
     ],
     entry_points={
         'console_scripts': [
