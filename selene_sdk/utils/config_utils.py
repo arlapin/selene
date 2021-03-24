@@ -21,7 +21,7 @@ def class_instantiate(classobj):
     class instantiation
     """
     for attr, obj in classobj.__dict__.items():
-        is_module = getattr(obj, '__module__', None)
+        is_module = getattr(obj, "__module__", None)
         if is_module and "selene_sdk" in is_module and attr is not "model":
             class_instantiate(obj)
     classobj.__init__(**classobj.__dict__)
@@ -42,8 +42,7 @@ def module_from_file(path):
 
     """
     parent_path, module_file = os.path.split(path)
-    loader = importlib.machinery.SourceFileLoader(
-        module_file[:-3], path)
+    loader = importlib.machinery.SourceFileLoader(module_file[:-3], path)
     module = types.ModuleType(loader.name)
     loader.exec_module(module)
     return module
@@ -118,8 +117,8 @@ def initialize_model(model_configs, train=True, lr=None):
     model = model_class(**model_configs["class_args"])
     if "non_strand_specific" in model_configs:
         from selene_sdk.utils import NonStrandSpecific
-        model = NonStrandSpecific(
-            model, mode=model_configs["non_strand_specific"])
+
+        model = NonStrandSpecific(model, mode=model_configs["non_strand_specific"])
 
     _is_lua_trained_model(model)
     criterion = module.criterion()
@@ -127,8 +126,9 @@ def initialize_model(model_configs, train=True, lr=None):
         optim_class, optim_kwargs = module.get_optimizer(lr)
         return model, criterion, optim_class, optim_kwargs
     elif train:
-        raise ValueError("Learning rate must be specified as a float "
-                         "but was {0}".format(lr))
+        raise ValueError(
+            "Learning rate must be specified as a float " "but was {0}".format(lr)
+        )
     return model, criterion
 
 
@@ -166,43 +166,53 @@ def execute(operations, configs, output_dir):
     for op in operations:
         if op == "train":
             model, loss, optim, optim_kwargs = initialize_model(
-                configs["model"], train=True, lr=configs["lr"])
+                configs["model"], train=True, lr=configs["lr"]
+            )
 
             sampler_info = configs["sampler"]
             if output_dir is not None:
                 sampler_info.bind(output_dir=output_dir)
             sampler = instantiate(sampler_info)
             train_model_info = configs["train_model"]
-            train_model_info.bind(model=model,
-                                  data_sampler=sampler,
-                                  loss_criterion=loss,
-                                  optimizer_class=optim,
-                                  optimizer_kwargs=optim_kwargs)
+            train_model_info.bind(
+                model=model,
+                data_sampler=sampler,
+                loss_criterion=loss,
+                optimizer_class=optim,
+                optimizer_kwargs=optim_kwargs,
+            )
             if output_dir is not None:
                 train_model_info.bind(output_dir=output_dir)
 
             train_model = instantiate(train_model_info)
             # TODO: will find a better way to handle this in the future
-            if "load_test_set" in configs and configs["load_test_set"] and \
-                    "evaluate" in operations:
+            if (
+                "load_test_set" in configs
+                and configs["load_test_set"]
+                and "evaluate" in operations
+            ):
                 train_model.create_test_set()
             train_model.train_and_validate()
 
         elif op == "evaluate":
             if train_model is not None:
-                train_model.evaluate()
+                average_scores, _ = train_model.evaluate()
+                hparam_dict = configs["model"]["class_args"].copy()
+                hparam_dict.update(
+                    {"lr": configs["lr"], "steps": train_model.max_steps}
+                )
+                with SummaryWriter(os.path.join(output_dir)) as w:
+                    w.add_hparams(hparam_dict, average_scores)
 
             if not model:
-                model, loss = initialize_model(
-                    configs["model"], train=False)
+                model, loss = initialize_model(configs["model"], train=False)
             if "evaluate_model" in configs:
                 sampler_info = configs["sampler"]
                 sampler = instantiate(sampler_info)
                 evaluate_model_info = configs["evaluate_model"]
                 evaluate_model_info.bind(
-                    model=model,
-                    criterion=loss,
-                    data_sampler=sampler)
+                    model=model, criterion=loss, data_sampler=sampler
+                )
                 if output_dir is not None:
                     evaluate_model_info.bind(output_dir=output_dir)
 
@@ -211,8 +221,7 @@ def execute(operations, configs, output_dir):
 
         elif op == "analyze":
             if not model:
-                model, _ = initialize_model(
-                    configs["model"], train=False)
+                model, _ = initialize_model(configs["model"], train=False)
             analyze_seqs_info = configs["analyze_sequences"]
             analyze_seqs_info.bind(model=model)
 
@@ -220,12 +229,13 @@ def execute(operations, configs, output_dir):
             if "variant_effect_prediction" in configs:
                 vareff_info = configs["variant_effect_prediction"]
                 if "vcf_files" not in vareff_info:
-                    raise ValueError("variant effect prediction requires "
-                                     "as input a list of 1 or more *.vcf "
-                                     "files ('vcf_files').")
+                    raise ValueError(
+                        "variant effect prediction requires "
+                        "as input a list of 1 or more *.vcf "
+                        "files ('vcf_files')."
+                    )
                 for filepath in vareff_info.pop("vcf_files"):
-                    analyze_seqs.variant_effect_prediction(
-                        filepath, **vareff_info)
+                    analyze_seqs.variant_effect_prediction(filepath, **vareff_info)
             if "in_silico_mutagenesis" in configs:
                 ism_info = configs["in_silico_mutagenesis"]
                 if "sequence" in ism_info:
@@ -235,23 +245,23 @@ def execute(operations, configs, output_dir):
                 elif "fa_files" in ism_info:
                     for filepath in ism_info.pop("fa_files"):
                         analyze_seqs.in_silico_mutagenesis_from_file(
-                            filepath, **ism_info)
+                            filepath, **ism_info
+                        )
                 else:
-                    raise ValueError("in silico mutagenesis requires as input "
-                                     "the path to the FASTA file "
-                                     "('input_path') or a sequence "
-                                     "('input_sequence') or a list of "
-                                     "FASTA files ('fa_files'), but found "
-                                     "neither.")
+                    raise ValueError(
+                        "in silico mutagenesis requires as input "
+                        "the path to the FASTA file "
+                        "('input_path') or a sequence "
+                        "('input_sequence') or a list of "
+                        "FASTA files ('fa_files'), but found "
+                        "neither."
+                    )
             if "prediction" in configs:
                 predict_info = configs["prediction"]
                 analyze_seqs.get_predictions(**predict_info)
 
 
-def parse_configs_and_run(configs,
-                          configs_path,
-                          create_subdirectory=True,
-                          lr=None):
+def parse_configs_and_run(configs, configs_path, create_subdirectory=True, lr=None):
     """
     Method to parse the configuration YAML file and run each operation
     specified.
@@ -308,18 +318,23 @@ def parse_configs_and_run(configs,
     if "train" in operations and "lr" not in configs and lr and lr != "None":
         configs["lr"] = float(lr)
     elif "train" in operations and "lr" in configs and lr and lr != "None":
-        print("Warning: learning rate specified in both the "
-              "configuration dict and this method's `lr` parameter. "
-              "Using the `lr` value input to `parse_configs_and_run` "
-              "({0}, not {1}).".format(lr, configs["lr"]))
+        print(
+            "Warning: learning rate specified in both the "
+            "configuration dict and this method's `lr` parameter. "
+            "Using the `lr` value input to `parse_configs_and_run` "
+            "({0}, not {1}).".format(lr, configs["lr"])
+        )
 
     current_run_output_dir = None
-    if "output_dir" not in configs and \
-            ("train" in operations or "evaluate" in operations):
-        print("No top-level output directory specified. All constructors "
-              "to be initialized (e.g. Sampler, TrainModel) that require "
-              "this parameter must have it specified in their individual "
-              "parameter configuration.")
+    if "output_dir" not in configs and (
+        "train" in operations or "evaluate" in operations
+    ):
+        print(
+            "No top-level output directory specified. All constructors "
+            "to be initialized (e.g. Sampler, TrainModel) that require "
+            "this parameter must have it specified in their individual "
+            "parameter configuration."
+        )
     elif "output_dir" in configs:
         current_run_output_dir = configs["output_dir"]
         os.makedirs(current_run_output_dir, exist_ok=True)
@@ -327,27 +342,29 @@ def parse_configs_and_run(configs,
             create_subdirectory = configs["create_subdirectory"]
         if create_subdirectory:
             current_run_output_dir = os.path.join(
-                current_run_output_dir, strftime("%Y-%m-%d-%H-%M-%S"))
+                current_run_output_dir, strftime("%Y-%m-%d-%H-%M-%S")
+            )
             os.makedirs(current_run_output_dir)
-        print("Outputs and logs saved to {0}".format(
-            current_run_output_dir))
+        print("Outputs and logs saved to {0}".format(current_run_output_dir))
 
     if "random_seed" in configs:
         seed = configs["random_seed"]
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
     else:
-        print("Warning: no random seed specified in config file. "
-              "Using a random seed ensures results are reproducible.")
+        print(
+            "Warning: no random seed specified in config file. "
+            "Using a random seed ensures results are reproducible."
+        )
 
     if "train" in configs:
         writer = SummaryWriter(os.path.join(current_run_output_dir))
-        with open(configs_path, 'r') as config_file:
+        with open(configs_path, "r") as config_file:
             # Add <pre> to persist spaces
             config_content = "<pre>" + config_file.read() + "</pre>"
-            writer.add_text('config', config_content)
+            writer.add_text("config", config_content)
 
-        with open(configs["model"]["path"], 'r') as model_file:
+        with open(configs["model"]["path"], "r") as model_file:
             # Add <pre> to persist spaces
             model_file_content = "<pre>" + model_file.read() + "</pre>"
             writer.add_text("model", model_file_content)
