@@ -444,6 +444,7 @@ class TrainModel(object):
                 self._validation_logger.info("\t".join(to_log))
 
                 scheduler.step(math.ceil(validation_loss * 1000.0) / 1000.0)
+                self._log_lr(step)
 
                 if validation_loss < min_loss:
                     min_loss = validation_loss
@@ -461,6 +462,7 @@ class TrainModel(object):
                 logger.info("validation loss: {0}".format(validation_loss))
 
         self.sampler.save_dataset_to_file("train", close_filehandle=True)
+        self._writer.flush()
 
     def train(self):
         """
@@ -649,3 +651,9 @@ class TrainModel(object):
             best_filepath = os.path.join(self.output_dir, "best_model")
             shutil.copyfile("{0}.pth.tar".format(cp_filepath),
                             "{0}.pth.tar".format(best_filepath))
+
+    def _log_lr(self, step):
+        lrs = [group['lr'] for group in self.optimizer.param_groups]
+        for index, lr in enumerate(lrs):
+            self._writer.add_scalar("lr_{}".format(index), lr, step)
+
