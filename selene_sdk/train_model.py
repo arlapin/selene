@@ -10,7 +10,12 @@ from time import strftime, time
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    average_precision_score,
+    confusion_matrix,
+    roc_auc_score,
+)
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
@@ -414,7 +419,7 @@ class TrainModel(object):
             time_per_step.append(t_f - t_i)
 
             if step % self.nth_step_save_checkpoint == 0:
-                checkpoint_basename = 'checkpoint'
+                checkpoint_basename = "checkpoint"
                 if (
                     self.save_new_checkpoints is not None
                     and self.save_new_checkpoints >= step
@@ -520,6 +525,11 @@ class TrainModel(object):
         self._validation_logger.info("\t".join(to_log))
 
         logger.info("validation loss: {0}".format(validation_loss))
+
+        cm = confusion_matrix(self._all_validation_targets, all_predictions > 0.5)
+        cm_plot = ConfusionMatrixDisplay(confusion_matrix=cm)
+        cm_plot.plot()
+        self._writer.add_figure("confusion_matrix", cm_plot.figure_, global_step=step)
 
         return validation_loss
 
