@@ -16,8 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from .utils import (PerformanceMetrics, initialize_logger,
-                    load_model_from_state_dict)
+from .utils import PerformanceMetrics, initialize_logger, load_model_from_state_dict
 
 logger = logging.getLogger("selene")
 
@@ -27,7 +26,8 @@ def _metrics_logger(name, out_filepath):
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter("%(message)s")
     file_handle = logging.FileHandler(
-        os.path.join(out_filepath, "{0}.txt".format(name)))
+        os.path.join(out_filepath, "{0}.txt".format(name))
+    )
     file_handle.setFormatter(formatter)
     logger.addHandler(file_handle)
     return logger
@@ -171,36 +171,36 @@ class TrainModel(object):
 
     """
 
-    def __init__(self,
-                 model,
-                 data_sampler,
-                 loss_criterion,
-                 optimizer_class,
-                 optimizer_kwargs,
-                 batch_size,
-                 max_steps,
-                 report_stats_every_n_steps,
-                 output_dir,
-                 save_checkpoint_every_n_steps=1000,
-                 save_new_checkpoints_after_n_steps=None,
-                 report_gt_feature_n_positives=10,
-                 n_validation_samples=None,
-                 n_test_samples=None,
-                 cpu_n_threads=1,
-                 use_cuda=False,
-                 data_parallel=False,
-                 logging_verbosity=2,
-                 checkpoint_resume=None,
-                 metrics=dict(roc_auc=roc_auc_score,
-                              average_precision=average_precision_score)):
+    def __init__(
+        self,
+        model,
+        data_sampler,
+        loss_criterion,
+        optimizer_class,
+        optimizer_kwargs,
+        batch_size,
+        max_steps,
+        report_stats_every_n_steps,
+        output_dir,
+        save_checkpoint_every_n_steps=1000,
+        save_new_checkpoints_after_n_steps=None,
+        report_gt_feature_n_positives=10,
+        n_validation_samples=None,
+        n_test_samples=None,
+        cpu_n_threads=1,
+        use_cuda=False,
+        data_parallel=False,
+        logging_verbosity=2,
+        checkpoint_resume=None,
+        metrics=dict(roc_auc=roc_auc_score, average_precision=average_precision_score),
+    ):
         """
         Constructs a new `TrainModel` object.
         """
         self.model = model
         self.sampler = data_sampler
         self.criterion = loss_criterion
-        self.optimizer = optimizer_class(
-            self.model.parameters(), **optimizer_kwargs)
+        self.optimizer = optimizer_class(self.model.parameters(), **optimizer_kwargs)
 
         self.batch_size = batch_size
         self.max_steps = max_steps
@@ -213,12 +213,13 @@ class TrainModel(object):
 
         self.save_new_checkpoints = save_new_checkpoints_after_n_steps
 
-        logger.info("Training parameters set: batch size {0}, "
-                    "number of steps per 'epoch': {1}, "
-                    "maximum number of steps: {2}".format(
-                        self.batch_size,
-                        self.nth_step_report_stats,
-                        self.max_steps))
+        logger.info(
+            "Training parameters set: batch size {0}, "
+            "number of steps per 'epoch': {1}, "
+            "maximum number of steps: {2}".format(
+                self.batch_size, self.nth_step_report_stats, self.max_steps
+            )
+        )
 
         torch.set_num_threads(cpu_n_threads)
 
@@ -240,13 +241,16 @@ class TrainModel(object):
 
         initialize_logger(
             os.path.join(self.output_dir, "{0}.log".format(__name__)),
-            verbosity=logging_verbosity)
+            verbosity=logging_verbosity,
+        )
 
         self._create_validation_set(n_samples=n_validation_samples)
+
         self._validation_metrics = PerformanceMetrics(
             self.sampler.get_feature_from_index,
             report_gt_feature_n_positives=report_gt_feature_n_positives,
-            metrics=metrics)
+            metrics=metrics,
+        )
 
         if "test" in self.sampler.modes:
             self._test_data = None
@@ -254,29 +258,35 @@ class TrainModel(object):
             self._test_metrics = PerformanceMetrics(
                 self.sampler.get_feature_from_index,
                 report_gt_feature_n_positives=report_gt_feature_n_positives,
-                metrics=metrics)
+                metrics=metrics,
+            )
 
         self._start_step = 0
-        self._min_loss = float("inf") # TODO: Should this be set when it is used later? Would need to if we want to train model 2x in one run.
+        # TODO: Should this be set when it is used later? Would need to if we want to
+        # train model 2x in one run.
+        self._min_loss = float("inf")
+
         if checkpoint_resume is not None:
             checkpoint = torch.load(
-                checkpoint_resume,
-                map_location=lambda storage, location: storage)
+                checkpoint_resume, map_location=lambda storage, location: storage
+            )
             if "state_dict" not in checkpoint:
-                raise ValueError("Selene does not support continued "
+                raise ValueError(
+                    "Selene does not support continued "
                     "training of models that were not originally "
-                    "trained using Selene.")
+                    "trained using Selene."
+                )
 
             self.model = load_model_from_state_dict(
-                checkpoint["state_dict"], self.model)
+                checkpoint["state_dict"], self.model
+            )
 
             self._start_step = checkpoint["step"]
             if self._start_step >= self.max_steps:
                 self.max_steps += self._start_step
 
             self._min_loss = checkpoint["min_loss"]
-            self.optimizer.load_state_dict(
-                checkpoint["optimizer"])
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
             if self.use_cuda:
                 for state in self.optimizer.state.values():
                     for k, v in state.items():
@@ -285,16 +295,23 @@ class TrainModel(object):
 
             logger.info(
                 ("Resuming from checkpoint: step {0}, min loss {1}").format(
-                    self._start_step, self._min_loss))
+                    self._start_step, self._min_loss
+                )
+            )
 
         self._train_logger = _metrics_logger(
-                "{0}.train".format(__name__), self.output_dir)
+            "{0}.train".format(__name__), self.output_dir
+        )
         self._validation_logger = _metrics_logger(
-                "{0}.validation".format(__name__), self.output_dir)
+            "{0}.validation".format(__name__), self.output_dir
+        )
 
         self._train_logger.info("loss")
-        self._validation_logger.info("\t".join(["loss"] +
-            sorted([x for x in self._validation_metrics.metrics.keys()])))
+        self._validation_logger.info(
+            "\t".join(
+                ["loss"] + sorted([x for x in self._validation_metrics.metrics.keys()])
+            )
+        )
 
     def _create_validation_set(self, n_samples=None):
         """
@@ -309,15 +326,21 @@ class TrainModel(object):
         """
         logger.info("Creating validation dataset.")
         t_i = time()
-        self._validation_data, self._all_validation_targets = \
-            self.sampler.get_validation_set(
-                self.batch_size, n_samples=n_samples)
+        (
+            self._validation_data,
+            self._all_validation_targets,
+        ) = self.sampler.get_validation_set(self.batch_size, n_samples=n_samples)
         t_f = time()
-        logger.info(("{0} s to load {1} validation examples ({2} validation "
-                     "batches) to evaluate after each training step.").format(
-                      t_f - t_i,
-                      len(self._validation_data) * self.batch_size,
-                      len(self._validation_data)))
+        logger.info(
+            (
+                "{0} s to load {1} validation examples ({2} validation "
+                "batches) to evaluate after each training step."
+            ).format(
+                t_f - t_i,
+                len(self._validation_data) * self.batch_size,
+                len(self._validation_data),
+            )
+        )
 
     def create_test_set(self):
         """
@@ -330,18 +353,22 @@ class TrainModel(object):
         """
         logger.info("Creating test dataset.")
         t_i = time()
-        self._test_data, self._all_test_targets = \
-            self.sampler.get_test_set(
-                self.batch_size, n_samples=self._n_test_samples)
+        self._test_data, self._all_test_targets = self.sampler.get_test_set(
+            self.batch_size, n_samples=self._n_test_samples
+        )
         t_f = time()
-        logger.info(("{0} s to load {1} test examples ({2} test batches) "
-                     "to evaluate after all training steps.").format(
-                      t_f - t_i,
-                      len(self._test_data) * self.batch_size,
-                      len(self._test_data)))
+        logger.info(
+            (
+                "{0} s to load {1} test examples ({2} test batches) "
+                "to evaluate after all training steps."
+            ).format(
+                t_f - t_i, len(self._test_data) * self.batch_size, len(self._test_data)
+            )
+        )
         np.savez_compressed(
             os.path.join(self.output_dir, "test_targets.npz"),
-            data=self._all_test_targets)
+            data=self._all_test_targets,
+        )
 
     def _get_batch(self):
         """
@@ -358,8 +385,9 @@ class TrainModel(object):
         t_f_sampling = time()
         logger.debug(
             ("[BATCH] Time to sample {0} examples: {1} s.").format(
-                 self.batch_size,
-                 t_f_sampling - t_i_sampling))
+                self.batch_size, t_f_sampling - t_i_sampling
+            )
+        )
         return samples_batch
 
     def train_and_validate(self):
@@ -369,11 +397,8 @@ class TrainModel(object):
         """
         min_loss = self._min_loss
         scheduler = ReduceLROnPlateau(
-            self.optimizer,
-            'min',
-            patience=16,
-            verbose=True,
-            factor=0.8)
+            self.optimizer, "min", patience=16, verbose=True, factor=0.8
+        )
 
         time_per_step = []
         train_losses = []
@@ -389,77 +414,36 @@ class TrainModel(object):
             time_per_step.append(t_f - t_i)
 
             if step % self.nth_step_save_checkpoint == 0:
-                checkpoint_dict = {
-                    "step": step,
-                    "arch": self.model.__class__.__name__,
-                    "state_dict": self.model.state_dict(),
-                    "min_loss": min_loss,
-                    "optimizer": self.optimizer.state_dict()
-                }
-                if self.save_new_checkpoints is not None and \
-                        self.save_new_checkpoints >= step:
-                    checkpoint_filename = "checkpoint-{0}".format(
-                        strftime("%m%d%H%M%S"))
-                    self._save_checkpoint(
-                        checkpoint_dict, False, filename=checkpoint_filename)
-                    logger.debug("Saving checkpoint `{0}.pth.tar`".format(
-                        checkpoint_filename))
-                else:
-                    self._save_checkpoint(checkpoint_dict, False)
+                checkpoint_basename = 'checkpoint'
+                if (
+                    self.save_new_checkpoints is not None
+                    and self.save_new_checkpoints >= step
+                ):
+                    checkpoint_basename = "checkpoint-{0}".format(
+                        strftime("%m%d%H%M%S")
+                    )
 
-            # TODO: Should we have some way to report training stats without running validation?
-            if step and step % self.nth_step_report_stats == 0:
-                logger.info(("[STEP {0}] average number "
-                             "of steps per second: {1:.1f}").format(
-                    step, 1. / np.average(time_per_step)))
-                time_per_step = []
-
-                train_loss = np.average(train_losses)
-                self._train_logger.info(train_loss)
-                self._writer.add_scalar('loss/train', train_loss, step)
-                train_losses = []
-
-                train_scores = self._compute_metrics(
-                        np.concatenate(train_predictions),
-                        np.concatenate(train_targets),
-                        log_prefix='train'
+                self._save_checkpoint(
+                    step, min_loss, is_best=False, filename=checkpoint_basename
                 )
-                train_predictions = []
-                train_targets = []
-                for k in sorted(self._validation_metrics.metrics.keys()):
-                    if k in train_scores and train_scores[k]:
-                        self._writer.add_scalar('{}/train'.format(k), train_scores[k], step)
+                logger.debug(
+                    "Saving checkpoint `{0}.pth.tar`".format(checkpoint_basename)
+                )
 
-                valid_scores = self.validate()
-                validation_loss = valid_scores["loss"]
-                self._writer.add_scalar('loss/test', validation_loss, step)
-                to_log = [str(validation_loss)]
+            if step and step % self.nth_step_report_stats == 0:
+                self._log_train_metrics_and_clean_cache(
+                    step, time_per_step, train_losses, train_predictions, train_targets
+                )
 
-                for k in sorted(self._validation_metrics.metrics.keys()):
-                    if k in valid_scores and valid_scores[k]:
-                        to_log.append(str(valid_scores[k]))
-                        self._writer.add_scalar('{}/test'.format(k), valid_scores[k], step)
-                    else:
-                        to_log.append("NA")
-                self._validation_logger.info("\t".join(to_log))
+                validation_loss = self._validate_and_log_metrics(step)
 
                 scheduler.step(math.ceil(validation_loss * 1000.0) / 1000.0)
                 self._log_lr(step)
 
                 if validation_loss < min_loss:
                     min_loss = validation_loss
-                    self._save_checkpoint({
-                        "step": step,
-                        "arch": self.model.__class__.__name__,
-                        "state_dict": self.model.state_dict(),
-                        "min_loss": min_loss,
-                        "optimizer": self.optimizer.state_dict()}, True)
-                    logger.debug("Updating `best_model.pth.tar`")
-
-                # Logging training and validation on same line requires 2 parsers or more complex parser.
-                # Separate logging of train/validate is just a grep for validation/train and then same parser.
-                logger.info("training loss: {0}".format(train_loss))
-                logger.info("validation loss: {0}".format(validation_loss))
+                    self._save_checkpoint(step, min_loss, is_best=True)
+                    logger.info("Updating `best_model.pth.tar`")
 
         self.sampler.save_dataset_to_file("train", close_filehandle=True)
         self._writer.flush()
@@ -486,7 +470,58 @@ class TrainModel(object):
         loss.backward()
         self.optimizer.step()
 
-        return predictions.cpu().detach().numpy(), targets.cpu().detach().numpy(), loss.item()
+        return (
+            predictions.cpu().detach().numpy(),
+            targets.cpu().detach().numpy(),
+            loss.item(),
+        )
+
+    def _log_train_metrics_and_clean_cache(
+        self, step, time_per_step, train_losses, train_predictions, train_targets
+    ):
+        logger.info(
+            ("[STEP {0}] average number " "of steps per second: {1:.1f}").format(
+                step, 1.0 / np.average(time_per_step)
+            )
+        )
+        time_per_step[:] = []
+
+        train_loss = np.average(train_losses)
+        self._train_logger.info(train_loss)
+        self._writer.add_scalar("loss/train", train_loss, step)
+        train_losses[:] = []
+
+        train_scores = self._compute_metrics(
+            np.concatenate(train_predictions),
+            np.concatenate(train_targets),
+            log_prefix="train",
+        )
+        train_predictions[:] = []
+        train_targets[:] = []
+
+        for k in sorted(self._validation_metrics.metrics.keys()):
+            if k in train_scores and train_scores[k]:
+                self._writer.add_scalar("{}/train".format(k), train_scores[k], step)
+
+        logger.info("training loss: {0}".format(train_loss))
+
+    def _validate_and_log_metrics(self, step):
+        valid_scores, all_predictions = self.validate()
+        validation_loss = valid_scores["loss"]
+        self._writer.add_scalar("loss/test", validation_loss, step)
+        to_log = [str(validation_loss)]
+
+        for k in sorted(self._validation_metrics.metrics.keys()):
+            if k in valid_scores and valid_scores[k]:
+                to_log.append(str(valid_scores[k]))
+                self._writer.add_scalar("{}/test".format(k), valid_scores[k], step)
+            else:
+                to_log.append("NA")
+        self._validation_logger.info("\t".join(to_log))
+
+        logger.info("validation loss: {0}".format(validation_loss))
+
+        return validation_loss
 
     def _evaluate_on_data(self, data_in_batches):
         """
@@ -516,8 +551,7 @@ class TrainModel(object):
                 predictions = self.model(inputs)
                 loss = self.criterion(predictions, targets)
 
-                all_predictions.append(
-                    predictions.data.cpu().numpy())
+                all_predictions.append(predictions.data.cpu().numpy())
 
                 batch_losses.append(loss.item())
         all_predictions = np.vstack(all_predictions)
@@ -535,6 +569,7 @@ class TrainModel(object):
             the validation set.
 
         """
+        # TODO(arlapin): Should use _train_metrics for "train"?
         scores = self._validation_metrics.update(predictions, targets)
         if log_prefix:
             for name, score in scores.items():
@@ -554,15 +589,13 @@ class TrainModel(object):
             the validation set.
 
         """
-        average_loss, all_predictions = self._evaluate_on_data(
-            self._validation_data)
-        average_scores = self._validation_metrics.update(all_predictions,
-                                                         self._all_validation_targets)
-        for name, score in average_scores.items():
-            logger.info("validation {0}: {1}".format(name, score))
-
+        average_loss, all_predictions = self._evaluate_on_data(self._validation_data)
+        average_scores = self._compute_metrics(
+            all_predictions, self._all_validation_targets, log_prefix="validation"
+        )
         average_scores["loss"] = average_loss
-        return average_scores
+
+        return average_scores, all_predictions
 
     def evaluate(self):
         """
@@ -578,34 +611,32 @@ class TrainModel(object):
         """
         if self._test_data is None:
             self.create_test_set()
-        average_loss, all_predictions = self._evaluate_on_data(
-            self._test_data)
+        average_loss, all_predictions = self._evaluate_on_data(self._test_data)
 
-        average_scores = self._test_metrics.update(all_predictions,
-                                                   self._all_test_targets)
+        average_scores = self._test_metrics.update(
+            all_predictions, self._all_test_targets
+        )
         np.savez_compressed(
-            os.path.join(self.output_dir, "test_predictions.npz"),
-            data=all_predictions)
+            os.path.join(self.output_dir, "test_predictions.npz"), data=all_predictions
+        )
 
         for name, score in average_scores.items():
             logger.info("test {0}: {1}".format(name, score))
 
-        test_performance = os.path.join(
-            self.output_dir, "test_performance.txt")
+        test_performance = os.path.join(self.output_dir, "test_performance.txt")
         feature_scores_dict = self._test_metrics.write_feature_scores_to_file(
-            test_performance)
+            test_performance
+        )
 
         average_scores["loss"] = average_loss
 
         self._test_metrics.visualize(
-            all_predictions, self._all_test_targets, self.output_dir)
+            all_predictions, self._all_test_targets, self.output_dir
+        )
 
         return (average_scores, feature_scores_dict)
 
-    def _save_checkpoint(self,
-                         state,
-                         is_best,
-                         filename="checkpoint"):
+    def _save_checkpoint(self, step, min_loss, is_best, filename="checkpoint"):
         """
         Saves snapshot of the model state to file. Will save a checkpoint
         with name `<filename>.pth.tar` and, if this is the model's best
@@ -642,18 +673,24 @@ class TrainModel(object):
         None
 
         """
-        logger.debug("[TRAIN] {0}: Saving model state to file.".format(
-            state["step"]))
-        cp_filepath = os.path.join(
-            self.output_dir, filename)
+        state = {
+            "step": step,
+            "arch": self.model.__class__.__name__,
+            "state_dict": self.model.state_dict(),
+            "min_loss": min_loss,
+            "optimizer": self.optimizer.state_dict(),
+        }
+
+        logger.debug("[TRAIN] {0}: Saving model state to file.".format(state["step"]))
+        cp_filepath = os.path.join(self.output_dir, filename)
         torch.save(state, "{0}.pth.tar".format(cp_filepath))
         if is_best:
             best_filepath = os.path.join(self.output_dir, "best_model")
-            shutil.copyfile("{0}.pth.tar".format(cp_filepath),
-                            "{0}.pth.tar".format(best_filepath))
+            shutil.copyfile(
+                "{0}.pth.tar".format(cp_filepath), "{0}.pth.tar".format(best_filepath)
+            )
 
     def _log_lr(self, step):
-        lrs = [group['lr'] for group in self.optimizer.param_groups]
+        lrs = [group["lr"] for group in self.optimizer.param_groups]
         for index, lr in enumerate(lrs):
             self._writer.add_scalar("lr_{}".format(index), lr, step)
-
