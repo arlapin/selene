@@ -357,7 +357,7 @@ def parse_configs_and_run(configs, configs_path, create_subdirectory=True, lr=No
             "Using a random seed ensures results are reproducible."
         )
 
-    if "train" in configs:
+    if "train" in operations:
         writer = SummaryWriter(os.path.join(current_run_output_dir))
         with open(configs_path, "r") as config_file:
             # Add <pre> to persist spaces
