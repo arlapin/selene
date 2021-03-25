@@ -526,7 +526,9 @@ class TrainModel(object):
 
         logger.info("validation loss: {0}".format(validation_loss))
 
-        cm = confusion_matrix(self._all_validation_targets, all_predictions > 0.5)
+        cm = confusion_matrix(
+            self._all_validation_targets.flatten(), all_predictions.flatten() > 0.5
+        )
         cm_plot = ConfusionMatrixDisplay(confusion_matrix=cm)
         cm_plot.plot()
         self._writer.add_figure("confusion_matrix", cm_plot.figure_, global_step=step)
