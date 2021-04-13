@@ -70,7 +70,7 @@ def module_from_dir(path):
     return importlib.import_module(module_dir)
 
 
-def initialize_model(model_configs, train=True, lr=None):
+def initialize_model(model_configs, loss_configs=None, train=True, lr=None):
     """
     Initialize model (and associated criterion, optimizer)
 
@@ -78,6 +78,8 @@ def initialize_model(model_configs, train=True, lr=None):
     ----------
     model_configs : dict
         Model-specific configuration
+    loss_configs : dict
+        Criterion-specific configuration
     train : bool, optional
         Default is True. If `train`, returns the user-specified optimizer
         and optimizer class that can be found within the input model file.
@@ -121,7 +123,10 @@ def initialize_model(model_configs, train=True, lr=None):
         model = NonStrandSpecific(model, mode=model_configs["non_strand_specific"])
 
     _is_lua_trained_model(model)
-    criterion = module.criterion()
+    if loss_configs is not None:
+        criterion = module.criterion(**loss_configs)
+    else:
+        criterion = module.criterion()
     if train and isinstance(lr, float):
         optim_class, optim_kwargs = module.get_optimizer(lr)
         return model, criterion, optim_class, optim_kwargs
@@ -130,6 +135,124 @@ def initialize_model(model_configs, train=True, lr=None):
             "Learning rate must be specified as a float " "but was {0}".format(lr)
         )
     return model, criterion
+
+
+def create_data_source(configs, output_dir=None, load_train_val=True, load_test=True):
+    """
+    Construct data source(s) used in training/evaluation.
+
+    Parameters
+    ----------
+    configs : dict or object
+        The loaded configurations from a YAML file.
+    output_dir : str or None
+        The path to the directory where all outputs will be saved.
+        If None, this means that an `output_dir` was not specified
+        in the top-level configuration keys. `output_dir` must be
+        specified in each class's individual configuration wherever
+        it is required.
+    load_train_val: bool
+        Return training and validation data loaders.
+        Only works when `"dataset" in configs`.
+    load_test: bool
+        Return test data loader. Only works when `"dataset" in configs`.
+
+    Returns
+    -------
+    model : Sampler or \
+        dataloaders : tuple(torch.utils.data.DataLoader)
+        Returns either a single data sampler specified in configs or
+        a tuple of data loaders according `load_train_val` and `load_test`,
+        which are not mutually exclusive.
+    """
+    if "sampler" in configs:
+        sampler_info = configs["sampler"]
+        if output_dir is not None:
+            sampler_info.bind(output_dir=output_dir)
+        sampler = instantiate(sampler_info)
+        return sampler
+    if "dataset" in configs:
+        dataset_info = configs["dataset"]
+        train_intervals = []
+        val_intervals = []
+        test_intervals = []
+        with open(dataset_info["sampling_intervals_path"]) as f:
+            for line in f:
+                chrom, start, end = line.rstrip().split("\t")[:3]
+                start = int(start)
+                end = int(end)
+                if load_train_val and chrom in dataset_info["validation_holdout"]:
+                    val_intervals.append((chrom, start, end))
+                elif load_test and chrom in dataset_info["test_holdout"]:
+                    test_intervals.append((chrom, start, end))
+                elif load_train_val:
+                    train_intervals.append((chrom, start, end))
+
+        with open(dataset_info["distinct_features_path"]) as f:
+            distinct_features = list(map(lambda x: x.rstrip(), f.readlines()))
+
+        with open(dataset_info["target_features_path"]) as f:
+            target_features = list(map(lambda x: x.rstrip(), f.readlines()))
+
+        module = None
+        if os.path.isdir(dataset_info["path"]):
+            module = module_from_dir(dataset_info["path"])
+        else:
+            module = module_from_file(dataset_info["path"])
+        dataset_class = getattr(module, dataset_info["class"])
+        dataset_info["dataset_args"]["target_features"] = target_features
+        dataset_info["dataset_args"]["distinct_features"] = distinct_features
+
+        if load_train_val:
+            # load train dataset and loader
+            train_config = dataset_info["dataset_args"]
+            train_config["intervals"] = train_intervals[::20000]
+            train_dataset = dataset_class(**train_config)
+
+            sampler_class = getattr(module, dataset_info["sampler_class"])
+            gen = torch.Generator()
+            gen.manual_seed(configs["random_seed"])
+            train_sampler = sampler_class(
+                train_dataset, replacement=False, generator=gen
+            )
+
+            train_loader = torch.utils.data.DataLoader(
+                train_dataset,
+                batch_size=dataset_info["loader_args"]["batch_size"],
+                num_workers=dataset_info["loader_args"]["num_workers"],
+                worker_init_fn=module.encode_worker_init_fn,
+                sampler=train_sampler,
+            )
+
+            # load validation dataset and loader
+            val_config = dataset_info["dataset_args"]
+            val_config["intervals"] = val_intervals[::100000]
+            val_dataset = dataset_class(**val_config)
+
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset,
+                batch_size=dataset_info["loader_args"]["batch_size"],
+                num_workers=dataset_info["loader_args"]["num_workers"],
+                worker_init_fn=module.encode_worker_init_fn,
+            )
+
+            if not load_test:
+                return train_loader, val_loader
+        if load_test:
+            # load test dataset and loader
+            test_config = dataset_info["dataset_args"]
+            test_config["intervals"] = test_intervals
+            test_dataset = dataset_class(**test_config)
+
+            test_loader = torch.utils.data.DataLoader(
+                test_dataset,
+                batch_size=dataset_info["loader_args"]["batch_size"],
+                num_workers=dataset_info["loader_args"]["num_workers"],
+                worker_init_fn=module.encode_worker_init_fn,
+            )
+            if not load_train_val:
+                return test_loader
+        return train_loader, val_loader, test_loader
 
 
 def execute(operations, configs, output_dir):
@@ -163,31 +286,71 @@ def execute(operations, configs, output_dir):
     """
     model = None
     train_model = None
+    if "dataset" in configs:
+        if "train" in operations and "evaluate" in operations:
+            train_loader, val_loader, test_loader = create_data_source(configs,
+                                                                       output_dir)
+        elif "train" in operations:
+            train_loader, val_loader = create_data_source(configs, output_dir,
+                                                          load_test=False)
+        elif "evaluate" in operations:
+            test_loader = create_data_source(configs, load_train_val=False,
+                                             load_test=True)
     for op in operations:
         if op == "train":
+            # make sure we provided the right dimensions in the config
+            if (
+                "dataset" in configs
+                and "n_cell_types" in configs["model"]["class_args"]
+            ):
+                assert (
+                    configs["model"]["class_args"]["n_cell_types"]
+                    == train_loader.dataset.n_cell_types
+                )
+            if (
+                "dataset" in configs
+                and "n_genomic_features" in configs["model"]["class_args"]
+            ):
+                assert (
+                    configs["model"]["class_args"]["n_genomic_features"]
+                    == train_loader.dataset.n_target_features
+                )
+
+            if "criterion" in configs:
+                loss_configs = configs["criterion"]
+            else:
+                loss_configs = None
             model, loss, optim, optim_kwargs = initialize_model(
-                configs["model"], train=True, lr=configs["lr"]
+                configs["model"], loss_configs, train=True, lr=configs["lr"]
             )
 
-            sampler_info = configs["sampler"]
-            if output_dir is not None:
-                sampler_info.bind(output_dir=output_dir)
-            sampler = instantiate(sampler_info)
             train_model_info = configs["train_model"]
-            train_model_info.bind(
-                model=model,
-                data_sampler=sampler,
-                loss_criterion=loss,
-                optimizer_class=optim,
-                optimizer_kwargs=optim_kwargs,
-            )
             if output_dir is not None:
                 train_model_info.bind(output_dir=output_dir)
 
+            if "sampler" in configs:
+                sampler = create_data_source(configs, output_dir)
+                train_model_info.bind(
+                    model=model,
+                    data_sampler=sampler,
+                    loss_criterion=loss,
+                    optimizer_class=optim,
+                    optimizer_kwargs=optim_kwargs,
+                )
+            if "dataset" in configs:
+                train_model_info.bind(
+                    model=model,
+                    loss_criterion=loss,
+                    optimizer_class=optim,
+                    optimizer_kwargs=optim_kwargs,
+                    train_loader=train_loader,
+                    val_loader=val_loader,
+                )
             train_model = instantiate(train_model_info)
             # TODO: will find a better way to handle this in the future
             if (
-                "load_test_set" in configs
+                "sampler" in configs
+                and "load_test_set" in configs
                 and configs["load_test_set"]
                 and "evaluate" in operations
             ):

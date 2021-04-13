@@ -172,7 +172,7 @@ def visualize_precision_recall_curves(
                 dpi=dpi)
 
 
-def compute_score(prediction, target, metric_fn,
+def compute_score(prediction, target, metric_fn, target_mask=None,
                   report_gt_feature_n_positives=10):
     """
     Using a user-specified metric, computes the distance between
@@ -187,6 +187,9 @@ def compute_score(prediction, target, metric_fn,
     metric_fn : types.FunctionType
         A metric that can measure the distance between the prediction
         and target variables.
+    target_mask: numpy.ndarray, optional
+        A mask of shape `target.shape` that indicates which values
+        should be considered when computing the scores.
     report_gt_feature_n_positives : int, optional
         Default is 10. The minimum number of positive examples for a
         feature in order to compute the score for it.
@@ -202,6 +205,10 @@ def compute_score(prediction, target, metric_fn,
     feature_scores = np.ones(target.shape[1]) * np.nan
     for index, feature_preds in enumerate(prediction.T):
         feature_targets = target[:, index]
+        if target_mask is not None:
+            feature_mask = target_mask[:, index]
+            feature_targets = feature_targets[feature_mask]
+            feature_preds = feature_preds[feature_mask]
         if len(np.unique(feature_targets)) > 0 and \
                np.count_nonzero(feature_targets) > report_gt_feature_n_positives:
             try:
@@ -361,7 +368,7 @@ class PerformanceMetrics(object):
         del self.metrics[name]
         return data
 
-    def update(self, prediction, target):
+    def update(self, prediction, target, target_mask=None):
         """
         Evaluates the tracked metrics on a model prediction and its
         target value, and adds this to the metric histories.
@@ -372,6 +379,9 @@ class PerformanceMetrics(object):
             Value predicted by user model.
         target : numpy.ndarray
             True value that the user model was trying to predict.
+        target_mask : numpy.ndarray, optional
+            A mask of shape `target.shape` that indicates which values
+            should be considered when computing the scores.
 
         Returns
         -------
@@ -384,7 +394,7 @@ class PerformanceMetrics(object):
         metric_scores = {}
         for name, metric in self.metrics.items():
             avg_score, feature_scores = compute_score(
-                prediction, target, metric.fn,
+                prediction, target, metric.fn, target_mask=target_mask,
                 report_gt_feature_n_positives=self.skip_threshold)
             metric.data.append(feature_scores)
             metric_scores[name] = avg_score
